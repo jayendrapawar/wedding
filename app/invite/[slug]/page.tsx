@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { AnimatePresence, motion, useScroll, useSpring, useTransform, type Variants } from 'framer-motion'
 import WeddingScene from '@/components/wedding-scene'
 import { getGuestBySlug, saveRSVP, getRSVPs } from '@/lib/store'
 
@@ -17,6 +18,24 @@ const gallery = [
   { src: 'https://images.unsplash.com/photo-1519225421980-715cb0215aed?auto=format&fit=crop&w=1000&q=85', alt: 'Wedding rings and flowers', caption: 'Forever begins' },
   { src: 'https://images.unsplash.com/photo-1507504031003-b417219a0fde?auto=format&fit=crop&w=1000&q=85', alt: 'Wedding couple in golden light', caption: 'Golden hour' },
 ]
+
+// ─── Motion variants ────────────────────────────────────────────────────────
+const easeOut = [0.22, 1, 0.36, 1] as const
+
+const fadeUp: Variants = {
+  hidden: { opacity: 0, y: 34 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.9, ease: easeOut } },
+}
+
+const stagger: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.14, delayChildren: 0.08 } },
+}
+
+const scaleIn: Variants = {
+  hidden: { opacity: 0, scale: 0.94 },
+  show: { opacity: 1, scale: 1, transition: { duration: 0.9, ease: easeOut } },
+}
 
 export default function InvitePage({ params }: { params: Promise<{ slug: string }> }) {
   const [slug, setSlug] = useState('')
@@ -41,15 +60,14 @@ export default function InvitePage({ params }: { params: Promise<{ slug: string 
     })
   }, [params])
 
-  useEffect(() => {
-    const reveal = () => document.querySelectorAll<HTMLElement>('.reveal').forEach(el => {
-      if (el.getBoundingClientRect().top < window.innerHeight * 0.88) el.classList.add('in')
-    })
-    reveal()
-    window.addEventListener('scroll', reveal)
-    window.addEventListener('resize', reveal)
-    return () => { window.removeEventListener('scroll', reveal); window.removeEventListener('resize', reveal) }
-  }, [opened])
+  // Scroll progress bar
+  const { scrollYProgress } = useScroll()
+  const progressScale = useSpring(scrollYProgress, { stiffness: 90, damping: 24, mass: 0.3 })
+
+  // Subtle parallax for hero art
+  const { scrollYProgress: heroProgress } = useScroll()
+  const heroY = useTransform(heroProgress, [0, 0.25], [0, -60])
+  const heroRotate = useTransform(heroProgress, [0, 0.25], [0, -3])
 
   const openInvitation = () => {
     if (opening || opened) return
@@ -81,27 +99,60 @@ export default function InvitePage({ params }: { params: Promise<{ slug: string 
 
   return (
     <>
-      <div className={`envelope-screen ${opening ? 'is-opening' : ''} ${opened ? 'is-hidden' : ''}`} aria-hidden={opened}>
-        <div className="opening-stars" aria-hidden="true"><i /><i /><i /></div>
-        <div className="env-title">
-          <p className="eyebrow">You&apos;re invited</p>
-          {displayName && (
-            <p className="invite-guest-name">Dear {displayName},</p>
-          )}
-          <p className="env-script">Sonalika &amp; Jayendra</p>
-          <p className="env-date">14 · 03 · 27 <span>—</span> Jaipur</p>
-        </div>
-        <button className="envelope" onClick={openInvitation} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openInvitation() } }} aria-label="Open wedding invitation">
-          <span className="env-body" /><span className="env-flap" /><span className="env-letter">Our wedding story awaits</span><span className="env-seal">S<span>&amp;</span>J</span>
-        </button>
-        <p className="env-hint">Tap the seal to open</p>
-        <div className="opening-progress" aria-hidden="true"><span /></div>
-      </div>
+      {/* Scroll progress bar */}
+      <motion.div
+        aria-hidden
+        style={{
+          position: 'fixed', top: 0, left: 0, right: 0, height: 3, transformOrigin: '0% 50%',
+          scaleX: progressScale, background: 'linear-gradient(90deg, var(--clay), var(--burgundy))', zIndex: 200,
+        }}
+      />
+
+      <AnimatePresence>
+        {!opened && (
+          <motion.div
+            className={`envelope-screen ${opening ? 'is-opening' : ''}`}
+            aria-hidden={opened}
+            exit={{ opacity: 0, transition: { duration: 0.6, ease: easeOut } }}
+          >
+            <div className="opening-stars" aria-hidden="true"><i /><i /><i /></div>
+            <motion.div className="env-title" initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.9, ease: easeOut }}>
+              <p className="eyebrow">You&apos;re invited</p>
+              {displayName && (
+                <motion.p className="invite-guest-name" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2, duration: 0.8 }}>
+                  Dear {displayName},
+                </motion.p>
+              )}
+              <p className="env-script">Sonalika &amp; Jayendra</p>
+              <p className="env-date">14 · 03 · 27 <span>—</span> Jaipur</p>
+            </motion.div>
+            <motion.button
+              className="envelope"
+              onClick={openInvitation}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openInvitation() } }}
+              aria-label="Open wedding invitation"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.35, duration: 0.8, ease: easeOut }}
+              whileHover={{ y: -8, rotateX: 3 }}
+              whileTap={{ scale: 0.97 }}
+            >
+              <span className="env-body" /><span className="env-flap" /><span className="env-letter">Our wedding story awaits</span><span className="env-seal">S<span>&amp;</span>J</span>
+            </motion.button>
+            <motion.p className="env-hint" animate={{ opacity: [0.5, 1, 0.5] }} transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}>
+              Tap the seal to open
+            </motion.p>
+            <div className="opening-progress" aria-hidden="true"><span /></div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <main className="site-shell">
         <div className="story-progress" aria-label="Story chapters"><span className="progress-dot active" /><span /><span /><span /><span /></div>
         <header className="topbar">
-          <button className="monogram" onClick={() => goTo('home')} aria-label="Back to top">S<span>&amp;</span>J</button>
+          <motion.button className="monogram" onClick={() => goTo('home')} aria-label="Back to top" whileHover={{ scale: 1.06 }} whileTap={{ scale: 0.95 }}>
+            S<span>&amp;</span>J
+          </motion.button>
           <nav className={`nav-links ${menuOpen ? 'is-open' : ''}`} aria-label="Main navigation">
             <button onClick={() => goTo('story')}>Our story</button>
             <button onClick={() => goTo('details')}>{copy.programme}</button>
@@ -119,108 +170,180 @@ export default function InvitePage({ params }: { params: Promise<{ slug: string 
 
         <section id="home" className="hero section-pad chapter">
           <div className="chapter-index">Chapter 01 / Welcome</div>
-          <div className="hero-copy">
-            <p className="eyebrow">{copy.invite}</p>
-            <h1>Sonalika <em>&amp;</em><br />Jayendra</h1>
-            <p className="hero-date">Saturday, 14 March 2027 <span>·</span> Jaipur, India</p>
-            {displayName && <p className="invite-personal">We joyfully invite<br /><strong>{displayName}</strong></p>}
-            <button className="text-link" onClick={() => goTo('details')}>{copy.rsvp} <span>↓</span></button>
-          </div>
-          <div className="hero-art hero-art-3d">
+          <motion.div className="hero-copy" variants={stagger} initial="hidden" animate="show">
+            <motion.p className="eyebrow" variants={fadeUp}>{copy.invite}</motion.p>
+            <motion.h1 variants={fadeUp}>Sonalika <em>&amp;</em><br />Jayendra</motion.h1>
+            <motion.p className="hero-date" variants={fadeUp}>Saturday, 14 March 2027 <span>·</span> Jaipur, India</motion.p>
+            {displayName && (
+              <motion.p className="invite-personal" variants={fadeUp}>We joyfully invite<br /><strong>{displayName}</strong></motion.p>
+            )}
+            <motion.button className="text-link" onClick={() => goTo('details')} variants={fadeUp} whileHover={{ x: 6 }} whileTap={{ scale: 0.97 }}>
+              {copy.rsvp} <span>↓</span>
+            </motion.button>
+          </motion.div>
+          <motion.div
+            className="hero-art hero-art-3d"
+            style={{ y: heroY, rotate: heroRotate }}
+            initial={{ opacity: 0, scale: 0.92 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 1.1, ease: easeOut, delay: 0.2 }}
+          >
             <WeddingScene />
-            <div className="scene-overlay"><span>an invitation in motion</span><strong>14 · 03 · 27</strong></div>
+            <motion.div className="scene-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8, duration: 0.8 }}>
+              <span>an invitation in motion</span><strong>14 · 03 · 27</strong>
+            </motion.div>
             <p className="image-caption">A new chapter<br /><span>begins here</span></p>
-            <div className="seal" aria-hidden="true">14<br /><small>MAR</small><br />27</div>
-          </div>
+            <motion.div
+              className="seal"
+              aria-hidden="true"
+              animate={{ rotate: [12, 18, 12] }}
+              transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              14<br /><small>MAR</small><br />27
+            </motion.div>
+          </motion.div>
         </section>
 
         <div className="marquee" aria-hidden="true"><span>THE BEGINNING OF FOREVER</span><span>THE BEGINNING OF FOREVER</span><span>THE BEGINNING OF FOREVER</span></div>
 
-        <section id="story" className="story section-pad chapter reveal">
+        <motion.section
+          id="story" className="story section-pad chapter"
+          variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.3 }}
+        >
           <div className="chapter-index">Chapter 02 / Our story</div>
-          <div className="section-label">II · Our story</div>
+          <motion.div className="section-label" variants={fadeUp}>II · Our story</motion.div>
           <div className="story-grid">
-            <h2>Two hearts,<br /><em>one beautiful</em><br />adventure.</h2>
-            <div className="story-copy">
+            <motion.h2 variants={fadeUp}>Two hearts,<br /><em>one beautiful</em><br />adventure.</motion.h2>
+            <motion.div className="story-copy" variants={fadeUp}>
               <p>What began as a chance meeting became a thousand little moments we never want to forget.</p>
               <p>Now, surrounded by the people who made us who we are, we invite you to celebrate the start of our forever.</p>
-              <span className="signature">With love, S &amp; J</span>
-            </div>
+              <motion.span
+                className="signature"
+                initial={{ opacity: 0, scale: 0.85 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.3, duration: 0.7, ease: easeOut }}
+              >
+                With love, S &amp; J
+              </motion.span>
+            </motion.div>
           </div>
-        </section>
+        </motion.section>
 
-        <section id="details" className="details section-pad chapter reveal">
+        <motion.section
+          id="details" className="details section-pad chapter"
+          variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.15 }}
+        >
           <div className="chapter-index">Chapter 03 / The day</div>
-          <div className="section-label">III · The day</div>
-          <div className="details-heading"><h2>A day to <em>remember.</em></h2><p>Come as you are, stay for the magic.</p></div>
-          <div className="event-list">{events.map(ev => (
-            <article className="event-row" key={ev.icon}>
-              <span className="event-number">{ev.icon}</span>
-              <div><p className="event-time">{ev.time}</p><h3>{ev.title}</h3></div>
-              <p className="event-detail">{ev.detail}</p>
-              <span className="event-arrow">↗</span>
-            </article>
-          ))}</div>
-          <div className="venue-card">
+          <motion.div className="section-label" variants={fadeUp}>III · The day</motion.div>
+          <motion.div className="details-heading" variants={fadeUp}><h2>A day to <em>remember.</em></h2><p>Come as you are, stay for the magic.</p></motion.div>
+          <div className="event-list">
+            {events.map(ev => (
+              <motion.article
+                className="event-row" key={ev.icon} variants={fadeUp}
+                whileHover={{ x: 10, backgroundColor: 'rgba(185,120,98,0.06)' }}
+                transition={{ duration: 0.3 }}
+              >
+                <span className="event-number">{ev.icon}</span>
+                <div><p className="event-time">{ev.time}</p><h3>{ev.title}</h3></div>
+                <p className="event-detail">{ev.detail}</p>
+                <motion.span className="event-arrow" whileHover={{ x: 4, y: -4 }}>↗</motion.span>
+              </motion.article>
+            ))}
+          </div>
+          <motion.div className="venue-card" variants={scaleIn}>
             <div>
               <p className="eyebrow">The venue</p>
               <h3>Rambagh Palace</h3>
               <p>Bhawan Singh Road, Jaipur<br />Rajasthan 302005, India</p>
-              <button className="text-link">View on map ↗</button>
+              <motion.button className="text-link" whileHover={{ x: 6 }}>View on map ↗</motion.button>
             </div>
-            <div className="venue-image"><img src="https://images.unsplash.com/photo-1548013146-72479768bada?auto=format&fit=crop&w=900&q=85" alt="Historic palace architecture in India" /></div>
-          </div>
-        </section>
+            <div className="venue-image">
+              <motion.img
+                src="https://images.unsplash.com/photo-1548013146-72479768bada?auto=format&fit=crop&w=900&q=85"
+                alt="Historic palace architecture in India"
+                initial={{ scale: 1.15 }}
+                whileInView={{ scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ duration: 1.4, ease: easeOut }}
+              />
+            </div>
+          </motion.div>
+        </motion.section>
 
-        <section id="gallery" className="gallery section-pad chapter reveal">
+        <motion.section
+          id="gallery" className="gallery section-pad chapter"
+          variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.2 }}
+        >
           <div className="chapter-index">Chapter 04 / In pictures</div>
-          <div className="section-label">IV · In pictures</div>
-          <h2>A little <em>love story.</em></h2>
-          <div className="gallery-stage" onMouseEnter={() => setGalleryHovered(true)} onMouseLeave={() => setGalleryHovered(false)}>
+          <motion.div className="section-label" variants={fadeUp}>IV · In pictures</motion.div>
+          <motion.h2 variants={fadeUp}>A little <em>love story.</em></motion.h2>
+          <motion.div
+            className="gallery-stage" variants={fadeUp}
+            onMouseEnter={() => setGalleryHovered(true)} onMouseLeave={() => setGalleryHovered(false)}
+          >
             <div className="gallery-track" style={{ animationPlayState: galleryPaused || galleryHovered ? 'paused' : 'running' }}>
               {galleryLoop.map((img, i) => (
-                <figure className={`gallery-card gallery-card-${(i % 4) + 1}`} key={i}>
+                <motion.figure
+                  className={`gallery-card gallery-card-${(i % 4) + 1}`} key={i}
+                  whileHover={{ scale: 1.04, zIndex: 2 }}
+                  transition={{ duration: 0.35, ease: easeOut }}
+                >
                   <img src={img.src} alt={img.alt} /><figcaption>{img.caption}</figcaption>
-                </figure>
+                </motion.figure>
               ))}
             </div>
-          </div>
-          <div className="gallery-meta">
+          </motion.div>
+          <motion.div className="gallery-meta" variants={fadeUp}>
             <button onClick={() => setGalleryPaused(!galleryPaused)}>{galleryPaused ? 'Play slideshow' : 'Pause slideshow'}</button>
-          </div>
-        </section>
+          </motion.div>
+        </motion.section>
 
-        <section id="rsvp" className="rsvp section-pad chapter reveal">
+        <motion.section
+          id="rsvp" className="rsvp section-pad chapter"
+          variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.25 }}
+        >
           <div className="chapter-index">Chapter 05 / Kindly reply</div>
-          <div className="section-label">V · Kindly reply</div>
+          <motion.div className="section-label" variants={fadeUp}>V · Kindly reply</motion.div>
           <div className="rsvp-inner">
-            <h2>Will you join<br /><em>our celebration?</em></h2>
-            {submitted ? (
-              <div className="success-message">
-                <span>Thank you{displayName ? `, ${displayName.split(' ')[0]}` : ''}.</span>
-                <p>Your response has been received. We cannot wait to see you there.</p>
-              </div>
-            ) : (
-              <form onSubmit={handleRSVP}>
-                <label>Your name<input required name="name" defaultValue={displayName} placeholder="Your name" /></label>
-                <label>Will you be joining us?
-                  <select name="attendance" defaultValue="yes">
-                    <option value="yes">Joyfully accepts</option>
-                    <option value="no">Regretfully declines</option>
-                  </select>
-                </label>
-                <label>A message for us (optional)<input name="message" placeholder="Your wishes…" /></label>
-                <button className="submit-button" type="submit">Send my RSVP <span>↗</span></button>
-              </form>
-            )}
+            <motion.h2 variants={fadeUp}>Will you join<br /><em>our celebration?</em></motion.h2>
+            <AnimatePresence mode="wait">
+              {submitted ? (
+                <motion.div
+                  key="success" className="success-message"
+                  initial={{ opacity: 0, scale: 0.85, y: 16 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ type: 'spring', stiffness: 220, damping: 18 }}
+                >
+                  <span>Thank you{displayName ? `, ${displayName.split(' ')[0]}` : ''}.</span>
+                  <p>Your response has been received. We cannot wait to see you there.</p>
+                </motion.div>
+              ) : (
+                <motion.form key="form" onSubmit={handleRSVP} variants={stagger} initial="hidden" animate="show">
+                  <motion.label variants={fadeUp}>Your name<input required name="name" defaultValue={displayName} placeholder="Your name" /></motion.label>
+                  <motion.label variants={fadeUp}>Will you be joining us?
+                    <select name="attendance" defaultValue="yes">
+                      <option value="yes">Joyfully accepts</option>
+                      <option value="no">Regretfully declines</option>
+                    </select>
+                  </motion.label>
+                  <motion.label variants={fadeUp}>A message for us (optional)<input name="message" placeholder="Your wishes…" /></motion.label>
+                  <motion.button className="submit-button" type="submit" variants={fadeUp} whileHover={{ x: 4 }} whileTap={{ scale: 0.97 }}>
+                    Send my RSVP <span>↗</span>
+                  </motion.button>
+                </motion.form>
+              )}
+            </AnimatePresence>
           </div>
-        </section>
+        </motion.section>
 
-        <footer>
+        <motion.footer
+          initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.8 }}
+        >
           <div className="footer-monogram">S <span>&amp;</span> J</div>
           <p>14 · 03 · 27 <span>—</span> Jaipur, India</p>
           <p className="footer-note">Made with love for our favourite people.</p>
-        </footer>
+        </motion.footer>
       </main>
     </>
   )
